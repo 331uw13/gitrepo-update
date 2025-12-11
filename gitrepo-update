@@ -1,0 +1,113 @@
+#!/usr/bin/perl
+
+
+use strict;
+use warnings;
+
+use Config::Tiny;
+
+our $version = "0.00";
+our $home = $ENV{"HOME"};
+our $cfgdir = "$home/.gitrepo-update";
+our $basecfg = "$cfgdir/basecfg.ini";
+
+our $prefix = "\033[36mgitrepo-update\033[90m:\033[0m ";
+
+sub print_help {
+    print(
+        "\n".
+        "  -c             ; Show current config number.\n".
+        "  -l             ; List all remote origins in current config.\n".
+        "  -a [url]       ; Add new remote origin to current config.\n".
+        "  -r [name]      ; Delete remote origin from current config.\n".
+        "\n".
+        "  -n [name]      ; Create new config.\n".
+        "  -lc            ; List all saved configs.\n".
+        "  -ac            ; Save current config (remote origins).\n".
+        "  -rc [name]     ; Delete config.\n".
+        "  -sc [name]     ; Switch config.\n".
+        "\n".
+        "\033[90mversion $version\033[0m\n"
+    );
+    exit();
+}
+
+sub get_arg {
+    if(!defined $ARGV[$_[0]]) {
+        print_help();
+    }
+    return $ARGV[$_[0]];
+}
+
+sub create_cfgdir {
+    mkdir $cfgdir;
+    open(FH, '>', $basecfg) or die $!;
+    print FH "[base]\n".
+    "current_config=<none>\n".
+    "avail_configs[]=\n";
+}
+
+sub get_current_config {
+    my $cfg = Config::Tiny->read($basecfg);
+    
+    return $cfg->{base}->{current_config} unless "<none>";
+}
+
+sub get_avail_configs {
+    my $cfg = Config::Tiny->read($basecfg); 
+    my $arr = $cfg->{base}->{avail_configs};
+    return @$arr;
+}
+
+sub create_config {
+    my $cfgname = $_[0];
+    mkdir "$cfgdir/$cfgname" or die $!;
+    
+
+    my $cfg = Config::Tiny->read($basecfg); 
+
+    my @configs = get_avail_configs();
+    my $num_configs = scalar(@configs);
+    
+    $cfg->{base}->{avail_configs}->[$num_configs] = $cfgname;
+    $cfg->write($basecfg);
+}
+
+
+
+
+sub main {
+    if(! -d $cfgdir) {
+        create_cfgdir();
+        print("$prefix created \"$basecfg\"\n");
+        exit();
+    }
+
+
+    my $arg0 = get_arg(0);
+    
+    if($arg0 eq "-c") {
+        print("$prefix Currently selected config = ". get_current_config() ."\n");
+        exit();
+    }
+    elsif($arg0 eq "-lc") {
+        my @configs = get_avail_configs();
+        print("$prefix --- Available configs:\n");
+        foreach my $cfg (@configs) {
+            if(length($cfg) > 0) {
+                print("$prefix '$cfg'\n");
+            }
+        }
+        exit();
+    }
+    elsif($arg0 eq "-n") {
+        my $arg1 = get_arg(1);
+        create_config($arg1);
+        exit();
+    }
+
+
+}
+
+
+main();

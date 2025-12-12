@@ -155,7 +155,7 @@ sub push_commit {
     }
 
     print_line();
-    print("\nReady to push commit? (y/n): ");
+    print("Ready to push commit? (y/n): ");
     my $input = <STDIN>;
     
     if(!(uc(substr($input, 0, 1)) eq "Y")) {

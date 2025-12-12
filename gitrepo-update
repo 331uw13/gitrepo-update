@@ -1,12 +1,12 @@
 #!/usr/bin/perl
 
-# --------------------------------------------
+# -------------------------------------------------
 #
 # Small utility program to be able to push
-# commits to multiple remote origins with git.
+# commits to multiple remote origins fast with git.
 #
 # ~331uw13
-# --------------------------------------------
+# -------------------------------------------------
 
 
 
@@ -18,112 +18,152 @@ use Config::Tiny;
 
 our $version = "0.01";
 our $home = $ENV{"HOME"};
-our $cfgdir = "$home/.gitrepo-update";
-our $basecfg = "$cfgdir/basecfg.ini";
+#our $cfgdir = "$home/.gitrepo-update";
+#our $basecfg = "$cfgdir/basecfg.ini";
+
+our $git_ignore = ".gitignore";
+our $cwdcfg_filename = ".gitrepo-update.ini";
 
 our $prefix_prog_name = "gitrepo-update";
-our $prefix = "\033[1;36m$prefix_prog_name\033[90m:\033[0m ";
-our $prefix_err = "\033[1;31m$prefix_prog_name\033[90m:\033[0m ";
+our $prefix      = "\033[1;36m$prefix_prog_name\033[90m:\033[0m ";
+our $prefix_err  = "\033[1;31m$prefix_prog_name\033[90m:\033[0m ";
+our $prefix_warn = "\033[1;33m$prefix_prog_name\033[90m:\033[0m ";
 our $prefix_indent = ' ' x (length($prefix_prog_name)+2);
 
 sub print_help {
     print(
         "\n".
-        "* -c                     ; Show current config number.\n".
-        "* -l                     ; List all remote origins in current config.\n".
-        "* -a [url]               ; Add new remote origin to current config.\n".
-        "  -r [name]              ; Delete remote origin from current config.\n".
+        "  -n              ; Create new config.\n".
+        "  -l              ; List all remote origins in current config.\n".
+        "  -a [url]        ; Add new remote origin to current config.\n".
         "\n".
-        "* -n [name]              ; Create new config.\n".
-        "* -lc                    ; List all saved configs.\n".
-        "  -rc [name]             ; Delete config.\n".
-        "* -sc [name]             ; Switch config.\n".
-        "\n".
-        "  push-commit [message]  ; Create commit and push to all remote origins in current config.\n".
+        "  -p [message]    ; Create commit and push to all remote origins in current config.\n".
         "\n".
         "\033[90mversion $version\033[0m\n"
     );
     exit();
 }
 
-sub create_cfgdir {
-    mkdir $cfgdir;
-    open(FH, '>', $basecfg) or die $!;
-    print FH "[base]\n".
-    "current_config=<none>\n".
-    "avail_configs[]=\n";
-    close(FH);
-}
-
-sub get_current_config {
-    my $cfg = Config::Tiny->read($basecfg);
-    
-    return $cfg->{base}->{current_config};
-}
-
-sub get_avail_configs {
-    my $cfg = Config::Tiny->read($basecfg); 
-    my $arr = $cfg->{base}->{avail_configs};
-    return @$arr;
-}
-
 sub get_config_remote_origins {
-    my $cfg = Config::Tiny->read("$cfgdir/$_[0].ini"); 
+    my $cfg = Config::Tiny->read($cwdcfg_filename); 
     my $arr = $cfg->{config}->{remote_origins};
     return @$arr;
 }
 
-sub create_config {
-    my $cfgname = $_[0];
-    if(-e "$cfgdir/$cfgname.ini") {
-        print("$prefix_err Config with name \"$cfgname\" already exists.\n");
-        exit();
-    }
- 
-    open(FH, '>', "$cfgdir/$cfgname.ini") or die $!;
-    print FH "[config]\n".
-    "remote_origins[]=\n";
-    close(FH);
-   
-    my $cfg = Config::Tiny->read($basecfg); 
 
-    my @configs = get_avail_configs();
-    foreach my $i (@configs) {
-        if($i eq $cfgname) {
-            print("$prefix_err Config with name \"$cfgname\" already exists.\n");
-            exit();
-        }
-    }
-    my $num_configs = scalar(@configs);
-    
-    $cfg->{base}->{avail_configs}->[$num_configs] = $cfgname;
-    $cfg->write($basecfg);
+sub create_file {
+    open(FH, '>', $_[0]) or die $!;
+    print FH $_[1];
+    close(FH);
+}
+sub append_file {
+    open(FH, '>>', $_[0]) or die $!;
+    print FH $_[1];
+    close(FH);
 }
 
-sub switch_config {
-    my $cfgname = $_[0];
-    my $cfg = Config::Tiny->read($basecfg); 
+sub create_config {
+    if(-e $cwdcfg_filename) {
+        print("$prefix_err Current working directory already has configuration file. Not overwriting.\n");
+        return;
+    }
+ 
+    create_file($cwdcfg_filename, 
+    "[config]\n".
+    "remote_origins[]=\n");
 
-    $cfg->{base}->{current_config} = $cfgname;
-    $cfg->write($basecfg);
+    print("$prefix Created '$cwdcfg_filename'\n");
+        
+    print("$prefix Add '$cwdcfg_filename' to '$git_ignore'? (y/n): ");
+    my $input = <STDIN>;
+
+    if(length($input) == 0) {
+        return;
+    }
+
+
+    if(!(uc(substr($input, 0, 1)) eq "Y")) {
+        print("Not editing .gitignore\n");
+        return;
+    }
+
+    if(!-e $git_ignore) {
+        create_file($git_ignore,
+        "$cwdcfg_filename\n");
+    }
+    else {
+        # Check first it doesnt exist already.
+        open(FH, '<', $git_ignore) or die $!;
+
+        while(my $line = <FH>) {
+            if($line eq "$cwdcfg_filename\n") {
+                return;
+            }
+        }
+
+        append_file($git_ignore, "$cwdcfg_filename\n");
+        close(FH);
+    }
+}
+
+sub cwdcfg_exists {
+    if(!-e $cwdcfg_filename) {
+        print("$prefix_err There is no configuration in current working directory.\n");
+        return 0;
+    }
+    return 1;
 }
 
 sub add_remote_origin {
-    my $curr_config = get_current_config();
-    if($curr_config eq "<none>") {
-        print("$prefix_err Cant add new remote origin to config, ".
-            "because no config is selected.\n");
+    if(!cwdcfg_exists()) {
+        print("$prefix_err Cant add new remote origin due to previous error.\n");
         return;
     }
-   
-    my @remote_origins = get_config_remote_origins($curr_config);
+    my @remote_origins = get_config_remote_origins();
     my $num_origins = scalar(@remote_origins);
-    my $cfg_file = "$cfgdir/$curr_config.ini";
-    my $cfg = Config::Tiny->read($cfg_file);
+    my $cfg = Config::Tiny->read($cwdcfg_filename);
 
     $cfg->{config}->{remote_origins}->[$num_origins] = $_[0];
+    $cfg->write($cwdcfg_filename);
+}
+            
+sub push_commit {
+    my $message = $_[0];
+    my $branch = $_[1];
 
-    $cfg->write($cfg_file);
+    if(length($message) == 0) {
+        return;
+    }
+    if(length($branch) == 0) {
+        return;
+    }
+
+    system("git add .");
+    system("git commit -m \"$message\"");
+    system("git show --summary");
+
+    print("$prefix Commit is going to be pushed into following remote origins:\n");
+    my @remote_origins = get_config_remote_origins();
+    foreach my $origin (@remote_origins) {
+        if(length($origin) > 0) {
+            print("$prefix_indent - $origin\n");
+        }
+    }
+
+    print("\nReady to push commit? (y/n): ");
+    my $input = <STDIN>;
+    
+    if(!(uc(substr($input, 0, 1)) eq "Y")) {
+        print("$prefix_err Commit not pushed.\n");
+        return;
+    }
+
+    foreach my $origin (@remote_origins) {
+        if(length($origin) > 0) {
+            system("git remote set-url origin $origin");
+            system("git push -u origin $branch");
+        }
+    }
 }
 
 sub process_flag {
@@ -131,8 +171,9 @@ sub process_flag {
     my $index = $_[1];
 
     given($flag) {
-        when("-c") {
-            print("$prefix Currently selected config = ". get_current_config() ."\n");
+   
+        when("-n") {
+            create_config();
             return 0;
         }
         when("-a") {
@@ -140,61 +181,44 @@ sub process_flag {
                 print_help();
             }
             add_remote_origin($ARGV[$index+1]);
-            return 1;
+            return 2;
         }
         when("-l") {
-            my $curr_config = get_current_config();
-            if($curr_config eq "<none>") {
-                print("$prefix_err Cant read remote origins in config, ".
-                    "because no config is selected.\n");
+            if(!cwdcfg_exists()) {
+                print("$prefix_err Cant list remote origins due to previous error.\n");
+            }
+            print("$prefix Current working directory config remote origins:\n");
+            my @remote_origins = get_config_remote_origins();
+            foreach my $origin (@remote_origins) {
+                if(length($origin) > 0) {
+                    print("$prefix_indent - $origin\n");
+                }
+            }
+            return 0;
+        }
+        when("-p") {
+            if(!defined($ARGV[$index+1])) {
+                print("$prefix_err Commit message and branch name is needed.");
+                print_help();
                 return 0;
             }
-            my @remote_origins = get_config_remote_origins($curr_config);
-            print("$prefix Remote origins in config '$curr_config':\n");
-            for my $i (0 .. $#remote_origins) {
-                if(length($remote_origins[$i]) > 0) {
-                    print("$prefix_indent ($i) - '$remote_origins[$i]'\n");
-                }
-            }
-            return 0;
-        }
-        when("-lc") {
-            my @configs = get_avail_configs();
-            print("$prefix Available configs:\n");
-            for my $i (0 .. $#configs) {
-                if(length($configs[$i]) > 0) {
-                    print("$prefix_indent ($i) - '$configs[$i]'\n");
-                }
-            }
-            return 0;
-        }
-        when("-sc") {
-            if(!defined($ARGV[$index+1])) {
+            if(!defined($ARGV[$index+2])) {
+                print("$prefix_err Branch name is needed.");
                 print_help();
+                return 1;
             }
-            switch_config($ARGV[$index+1]);
-            return 1;
+
+            push_commit($ARGV[$index+1], $ARGV[$index+2]);
+
+            return 2;
         }
-        when("-n") {
-            if(!defined($ARGV[$index+1])) {
-                print_help();
-            }
-            create_config($ARGV[$index+1]);
-            return 1;
-        }
-        default {
-            print("$prefix_err Unknown action flag: '$flag'\n");
-            return 0;
-        }
+
     }
 
     return 0;
 }
 
 sub main {
-    if(! -d $cfgdir) {
-        create_cfgdir();
-    }
 
     if(scalar(@ARGV) <= 0) {
         print("$prefix_err No action selected.\n");
@@ -208,7 +232,6 @@ sub main {
 
         $i += 1 + $i_skip;
     }
-
 }
 
 

@@ -126,6 +126,10 @@ sub add_remote_origin {
     $cfg->{config}->{remote_origins}->[$num_origins] = $_[0];
     $cfg->write($cwdcfg_filename);
 }
+
+sub print_line {
+    print("\033[2;90m-------------------------------------\033[0m\n");
+}
             
 sub push_commit {
     my $message = $_[0];
@@ -150,6 +154,7 @@ sub push_commit {
         }
     }
 
+    print_line();
     print("\nReady to push commit? (y/n): ");
     my $input = <STDIN>;
     

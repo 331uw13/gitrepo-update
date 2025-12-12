@@ -128,7 +128,7 @@ sub add_remote_origin {
 }
 
 sub print_line {
-    print("\033[2;90m-------------------------------------\033[0m\n");
+    print("\033[2;90m-----\033[0m\n");
 }
             
 sub push_commit {
